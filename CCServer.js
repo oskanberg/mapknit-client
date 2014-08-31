@@ -9,9 +9,12 @@ define(['Util'], function(Util) {
         // }
 
         var self = this;
+        self.peerId = self._uuid();
+
         var url = document.URL.split('/')[2];
         url = url.split(':')[0];
         self.ws = new WebSocket('ws://' + url + ':1123');
+
         self.ws.onerror = function(event) {
             Util.debug('aw shite, error', 'error');
             Util.debug(event);
@@ -33,41 +36,15 @@ define(['Util'], function(Util) {
             var subs = self.messageRegister[msg.type];
             for (var i = 0; i < subs.length; i++) {
                 // async(function() {
-                    subs[i](msg);
+                subs[i](msg);
                 // });
             }
         };
     }
 
-
-    CCServer.prototype.getResourcePeersXMLHTTP = function(url) {
-        var self = this;
-        // TODO
-        Util.debug('not yet implemented', 'log');
-        return;
-        self.connected.then(function() {
-            var promise = new Promise(function(resolve, reject) {
-                var xmlhttp = new XMLHttpRequest();
-                xmlhttp.onreadystatechange = function() {
-                    if (xmlhttp.readystate == 4) {
-                        if (xmlhttp.status == 200) {
-                            response = JSON.parse(xmlhttp.responseText);
-                            resolve(response.peers);
-                        } else {
-                            // TODO : fail gracefully
-                            reject(Error(':( could not get resource peers'));
-                        }
-                    }
-                };
-                var url = self.CC_SERV + '/rp/' + btoa(url);
-                xmlhttp.open('GET', url, true);
-            });
-            return promise;
-        });
-    };
-
     CCServer.prototype.getResourcePeers = function(url) {
         var self = this;
+        var url = location.host + '::' + url;
         var promise = new Promise(function(resolve, reject) {
             self.connected.then(function() {
                 var uuid = self._uuid();
@@ -82,14 +59,21 @@ define(['Util'], function(Util) {
                     if (message.requestId == uuid) {
                         Util.debug('got peers', 'log');
                         resolve(message.peers);
-                    } else {
-                        Util.debug(':o(', 'log');
                     }
                 });
-                self.ws.send(JSON.stringify(msg));
+                self._sendObj(msg);
             });
         });
         return promise;
+    };
+
+    CCServer.prototype.registerResource = function(url) {
+        var url = location.host + '::' + url;
+        var msg = {
+            type: 'resourceregister',
+            resourceId: btoa(url)
+        };
+        this._sendObj(msg);
     };
 
     CCServer.prototype._uuid = function() {
@@ -100,6 +84,13 @@ define(['Util'], function(Util) {
         var self = this;
         self.messageRegister[type] = self.messageRegister[type] || [];
         self.messageRegister[type].push(fn);
+    };
+
+    CCServer.prototype._sendObj = function(obj) {
+        obj.meta = obj.meta || {};
+        obj.meta.peerId = this.peerId;
+        console.log('sending ' + obj);
+        this.ws.send(JSON.stringify(obj));
     };
 
     return CCServer;
